@@ -91,7 +91,7 @@ void AudioI2c::setHPMode(audio_hpmode_t mode)
 void AudioI2c::setRGBBrightness(uint8_t brightness)
 {
     if (brightness > 100) brightness = 100;
-    uint8_t reg = RGB_BRIGHTNESS;
+    uint8_t reg = RGB_LED_BRIGHTNESS;
     writeBytes(_addr, reg, (uint8_t *)&brightness, 1);
 }
 
@@ -148,7 +148,7 @@ uint8_t AudioI2c::getHPInsertStatus()
 uint8_t AudioI2c::getRGBBrightness()
 {
     uint8_t data;
-    uint8_t reg = RGB_BRIGHTNESS;
+    uint8_t reg = RGB_LED_BRIGHTNESS;
     readBytes(_addr, reg, (uint8_t *)&data, 1);
     return data;
 }

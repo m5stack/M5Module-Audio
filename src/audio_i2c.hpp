@@ -53,7 +53,7 @@
 /**S
  * @brief RGB LED Brightness Control Register (R/W)
  */
-#define RGB_BRIGHTNESS (0x30)
+#define RGB_LED_BRIGHTNESS (0x30)
 
 /**
  * @brief RGB LED Color Control Register (R/W)

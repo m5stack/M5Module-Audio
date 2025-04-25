@@ -6,7 +6,7 @@
  * @Hardwares: M5Core Basic v2.7+ Module Audio
  * @Dependent Library:
  * M5Unified@^0.2.5: https://github.com/m5stack/M5Unified
- * Module Audio:
+ * Module Audio:https://github.com/m5stack/M5Module-Audio
  */
 
 #include "M5Unified.h"
@@ -71,7 +71,7 @@ void setup()
             Serial.println(address, HEX);
         }
     }
-    device.begin(&Wire, SYS_I2C_SCL_PIN, SYS_I2C_SCL_PIN);
+    device.begin(&Wire, SYS_I2C_SDA_PIN, SYS_I2C_SCL_PIN);
     device.setHPMode(AUDIO_HPMODE_NATIONAL);
     device.setMICStatus(AUDIO_MIC_OPEN);
     device.setRGBBrightness(100);
