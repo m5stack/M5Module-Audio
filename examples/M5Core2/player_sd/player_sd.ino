@@ -88,7 +88,6 @@ void setup()
     es8388.setADCVolume(100);
     es8388.setDACVolume(80);
     es8388.setDACOutput(DAC_OUTPUT_OUT1);
-    es8388.setMixSourceSelect(MIXADC, MIXADC);
     es8388.setBitsSample(ES_MODULE_ADC, BIT_LENGTH_16BITS);
     es8388.setSampleRate(SAMPLE_RATE_44K);
     uint8_t *reg;
