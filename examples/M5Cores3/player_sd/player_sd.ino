@@ -3,10 +3,14 @@
  *
  * SPDX-License-Identifier: MIT
  *
- * @Hardwares: M5Cores3+ Module Audio
+ * @Hardwares: M5CoreS3 + Module Audio
  * @Dependent Library:
  * M5Unified@^0.2.5: https://github.com/m5stack/M5Unified
- * Module Audio:https://github.com/m5stack/M5Module-Audio
+ * Module Audio: https://github.com/m5stack/M5Module-Audio
+ * 
+ * Please rollback these libraries if you encounter I2S initialization issues.
+ * Board Manager M5Stack@2.0.7;
+ * M5Unified@0.1.17;
  */
 
 #include "M5Unified.h"
