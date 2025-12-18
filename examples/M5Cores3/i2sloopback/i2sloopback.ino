@@ -16,8 +16,18 @@
 #include "M5Unified.h"
 #include "audio_i2c.hpp"
 #include "es8388.hpp"
-#include "driver/i2s.h"
+
 AudioI2c device;
+
+#define USE_NEW_I2S_API 1
+#define RECORD_SIZE (44100 * 2 * 2 * 2)
+
+#if USE_NEW_I2S_API
+    #include <ESP_I2S.h>
+    I2SClass I2S;
+#else
+    #include "driver/i2s.h"
+#endif
 
 #define SYS_I2C_SDA_PIN  12
 #define SYS_I2C_SCL_PIN  11
@@ -32,30 +42,11 @@ AudioI2c device;
 #define SYS_SPI_CS_PIN   4
 
 ES8388 es8388(&Wire, SYS_I2C_SDA_PIN, SYS_I2C_SCL_PIN);
-
-uint16_t rxbuf[256], txbuf[256];
+static uint8_t *buffer = nullptr;
+uint16_t rxbuf[1024], txbuf[1024];
 size_t readsize = 0;
 byte error, address;
 const uint32_t color[]  = {0xFF0000, 0xFF0000, 0xFF0000, 0x00FF00, 0xFFFF00, 0xFFFFFF, 0xFFFFFF, 0xFFFFFF, 0xFFFFFF};
-i2s_config_t i2s_config = {.mode                 = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX | I2S_MODE_RX),
-                           .sample_rate          = 44100,
-                           .bits_per_sample      = I2S_BITS_PER_SAMPLE_16BIT,
-                           .channel_format       = I2S_CHANNEL_FMT_RIGHT_LEFT,
-                           .communication_format = I2S_COMM_FORMAT_STAND_I2S,
-                           .intr_alloc_flags     = 0,
-                           .dma_buf_count        = 8,
-                           .dma_buf_len          = 512,
-                           .use_apll             = false,
-                           .tx_desc_auto_clear   = true,
-                           .fixed_mclk           = 0};
-
-i2s_pin_config_t pin_config = {
-    .mck_io_num   = SYS_I2S_MCLK_PIN,
-    .bck_io_num   = SYS_I2S_SCLK_PIN,
-    .ws_io_num    = SYS_I2S_LRCK_PIN,
-    .data_out_num = SYS_I2S_DOUT_PIN,
-    .data_in_num  = SYS_I2S_DIN_PIN,
-};
 
 void setup()
 {
@@ -100,21 +91,117 @@ void setup()
         reg = es8388.readAllReg();
         Serial.printf("Reg-%02d = 0x%02x\r\n", i, reg[i]);
     }
-    // i2s
+#if USE_NEW_I2S_API
+    uint32_t sample_rate = 44100;
+    uint8_t i2s_bck     = SYS_I2S_SCLK_PIN;
+    uint8_t i2s_ws      = SYS_I2S_LRCK_PIN;
+    uint8_t i2s_do      = SYS_I2S_DOUT_PIN;
+    uint8_t i2s_di      = SYS_I2S_DIN_PIN;
+    uint8_t i2s_mc      = SYS_I2S_MCLK_PIN;
+    I2S.setPins(i2s_bck, i2s_ws, i2s_do, i2s_di, i2s_mc); //SCK, WS, SDOUT, SDIN, MCLK
+    I2S.begin(I2S_MODE_STD, 44100, I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO);
+I2S.configureRX(
+  44100,
+  I2S_DATA_BIT_WIDTH_16BIT,
+  I2S_SLOT_MODE_STEREO
+);
+
+I2S.configureTX(
+  44100,
+  I2S_DATA_BIT_WIDTH_16BIT,
+  I2S_SLOT_MODE_STEREO
+);
+#else
+    i2s_config_t i2s_config = {.mode                 = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX | I2S_MODE_RX),
+                            .sample_rate          = 44100,
+                            .bits_per_sample      = I2S_BITS_PER_SAMPLE_16BIT,
+                            .channel_format       = I2S_CHANNEL_FMT_RIGHT_LEFT,
+                            .communication_format = I2S_COMM_FORMAT_STAND_I2S,
+                            .intr_alloc_flags     = 0,
+                            .dma_buf_count        = 8,
+                            .dma_buf_len          = 512,
+                            .use_apll             = false,
+                            .tx_desc_auto_clear   = true,
+                            .fixed_mclk           = 0};
+
+    i2s_pin_config_t pin_config = {
+        .mck_io_num   = SYS_I2S_MCLK_PIN,
+        .bck_io_num   = SYS_I2S_SCLK_PIN,
+        .ws_io_num    = SYS_I2S_LRCK_PIN,
+        .data_out_num = SYS_I2S_DOUT_PIN,
+        .data_in_num  = SYS_I2S_DIN_PIN,
+    };
+
     PIN_FUNC_SELECT(PERIPHS_IO_MUX_GPIO0_U, FUNC_GPIO0_CLK_OUT1);
     WRITE_PERI_REG(PIN_CTRL, 0xFFF0);
     i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL);
     i2s_set_pin(I2S_NUM_0, &pin_config);
-}
 
+#endif
+    buffer = (uint8_t *)malloc(RECORD_SIZE);  // Allocate memory for the record buffer.
+    // Check if memory allocation was successful.
+    if (buffer == nullptr) {
+        // If memory allocation fails, enter an infinite loop.
+        while (true) {
+            Serial.println("Failed to allocate memory :(");
+            delay(1000);
+        }
+}
+}
 void loop()
 {
-    i2s_read(I2S_NUM_0, &rxbuf[0], 256 * 2, &readsize, 1000);
-    for (int i = 0; i < 256; i++) {
+    size_t bytes_to_record = RECORD_SIZE;  // sample_rate * bytes_per_sample * channels
+
+    size_t bytes_read = 0;
+
+#if USE_NEW_I2S_API
+    Serial.println("Start recording");
+    bytes_read    = I2S.readBytes((char*)buffer, bytes_to_record);
+    if (bytes_read < 0) {
+        ESP_LOGI(TAG, "Recording failed during I2S read");
+    }
+        
+#else
+    esp_err_t err = i2s_read(I2S_NUM_0, &rxbuf[0], 1024 * 96, &readsize, 1000);
+    
+    if (err != ESP_OK) {
+        ESP_LOGI(TAG, "Recording failed during I2S read");
+    }else ESP_LOGI(TAG, "Recording");
+#endif
+    delay(100);
+    size_t samples = bytes_read / sizeof(int16_t);
+    int16_t* pcm = (int16_t*)buffer;
+
+    int16_t peak = 0;
+
+for (size_t i = 0; i < samples; i++) {
+    int16_t v = pcm[i];
+    if (v < 0) v = -v;
+    if (v > peak) peak = v;
+}
+
+float level = (float)peak / 32767.0f;
+
+Serial.printf("Level: %.3f\n", level);
+    for (int i = 0; i < 1024; i++) {
         // direct transfer too txbuff
         txbuf[i] = rxbuf[i];
         // txbuf[i] = 0; //mute
     }
     // play received buffer
-    i2s_write(I2S_NUM_0, &txbuf[0], 256 * 2, &readsize, 1000);
+    size_t bytes_written = 0;
+#if USE_NEW_I2S_API
+Serial.println("Start playing");
+    bytes_written = I2S.write(buffer, RECORD_SIZE);
+    if (bytes_written < 0) {
+        ESP_LOGI(TAG, "Playback failed");
+    }
+            
+#else
+    err        = i2s_write(I2S_NUM_0, &txbuf[0], 1024 * 96, &readsize, 1000);
+    if (err != ESP_OK) {
+        ESP_LOGI(TAG, "Playback failed during I2S write");
+    }
+#endif
+    delay(100);
 }
