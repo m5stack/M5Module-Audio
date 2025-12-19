@@ -7,7 +7,7 @@
  * @Dependent Library:
  * M5Unified@^0.2.5: https://github.com/m5stack/M5Unified
  * Module Audio: https://github.com/m5stack/M5Module-Audio
- * 
+ *
  * Please rollback these libraries if you encounter I2S initialization issues.
  * Board Manager M5Stack@2.0.7;
  * M5Unified@0.1.17;
