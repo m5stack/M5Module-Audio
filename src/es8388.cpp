@@ -24,11 +24,11 @@ bool ES8388::writeBytes(uint8_t reg, uint8_t data)
 #if ES8388_DEBUG
     Serial.print("Write bytes: [");
     Serial.print(ES8388_ADDR);
-    Serial.print(", ");
+    Serial.print(",");
     Serial.print(reg);
-    Serial.print(", ");
+    Serial.print(",");
     Serial.print(data);
-    Serial.print(", ");
+    Serial.print(",");
 #else
 #endif
 }
@@ -48,11 +48,11 @@ bool ES8388::readBytes(uint8_t reg, uint8_t& data)
 #if AUDIO_I2C_DEBUG
     Serial.print("Read bytes: [");
     Serial.print(ES8388_ADDR);
-    Serial.print(", ");
+    Serial.print(",");
     Serial.print(reg);
-    Serial.print(", ");
+    Serial.print(",");
     Serial.print(data);
-    Serial.print(", ");
+    Serial.print(",");
 #else
 #endif
 }

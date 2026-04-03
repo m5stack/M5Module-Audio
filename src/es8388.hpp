@@ -303,22 +303,22 @@
  * @note Mixer configuration affects audio path routing
  */
 typedef enum {
-    MIXLIN1, /**< Direct line input 1 (unprocessed signal path) */
-    MIXLIN2, /**< Direct line input 2 (alternative signal path) */
-    MIXRES,  /**< Reserved mixer source (do not use in normal operation) */
-    MIXADC   /**< Processed signal from ADC/ALC (with automatic level control) */
+    MIXLIN1, /**<Direct line input 1 (unprocessed signal path) */
+    MIXLIN2, /**<Direct line input 2 (alternative signal path) */
+    MIXRES,  /**<Reserved mixer source (do not use in normal operation) */
+    MIXADC   /**<Processed signal from ADC/ALC (with automatic level control) */
 } es_mixsel_t;
 
 /**
  * @brief ES8388 functional module selection
  */
 typedef enum {
-    ES_MODULE_MIN     = -1,   /**< Minimum module selector (validation flag) */
+    ES_MODULE_MIN     = -1,   /**<Minimum module selector (validation flag) */
     ES_MODULE_ADC     = 0x01, /**< Enable ADC module */
     ES_MODULE_DAC     = 0x02, /**< Enable DAC module */
     ES_MODULE_ADC_DAC = 0x03, /**< Enable both ADC and DAC modules */
     ES_MODULE_LINE    = 0x04, /**< Line-in/out interface control */
-    ES_MODULE_MAX             /**< Maximum module selector (validation flag) */
+    ES_MODULE_MAX             /**<Maximum module selector (validation flag) */
 } es_module_t;
 
 /**
@@ -326,13 +326,13 @@ typedef enum {
  * @note Actual supported resolution depends on hardware capabilities
  */
 typedef enum {
-    BIT_LENGTH_MIN    = -1,   /**< Minimum bit length flag (validation) */
+    BIT_LENGTH_MIN    = -1,   /**<Minimum bit length flag (validation) */
     BIT_LENGTH_16BITS = 0x03, /**< 16-bit word length */
     BIT_LENGTH_18BITS = 0x02, /**< 18-bit word length */
     BIT_LENGTH_20BITS = 0x01, /**< 20-bit word length */
-    BIT_LENGTH_24BITS = 0x00, /**< 24-bit word length (typical default) */
+    BIT_LENGTH_24BITS = 0x00, /**<24-bit word length (typical default) */
     BIT_LENGTH_32BITS = 0x04, /**< 32-bit word length */
-    BIT_LENGTH_MAX,           /**< Maximum bit length flag (validation) */
+    BIT_LENGTH_MAX,           /**<Maximum bit length flag (validation) */
 } es_bits_length_t;
 
 /**
@@ -368,7 +368,7 @@ typedef enum {
     MIC_GAIN_15DB,    /**< 15dB microphone gain */
     MIC_GAIN_18DB,    /**< 18dB microphone gain */
     MIC_GAIN_21DB,    /**< 21dB microphone gain */
-    MIC_GAIN_24DB,    /**< 24dB microphone gain (maximum) */
+    MIC_GAIN_24DB,    /**<24dB microphone gain (maximum) */
 } es_mic_gain_t;
 
 typedef enum {
@@ -377,8 +377,8 @@ typedef enum {
     SAMPLE_RATE_16K,    /**< 16000 Hz sampling rate */
     SAMPLE_RATE_24K,    /**< 24000 Hz sampling rate */
     SAMPLE_RATE_32K,    /**< 32000 Hz sampling rate */
-    SAMPLE_RATE_44K,    /**< 44100 Hz sampling rate (CD quality) */
-    SAMPLE_RATE_48K     /**< 48000 Hz sampling rate (professional audio) */
+    SAMPLE_RATE_44K,    /**<44100 Hz sampling rate (CD quality) */
+    SAMPLE_RATE_48K     /**<48000 Hz sampling rate (professional audio) */
 } es_sample_rate_t;
 
 class ES8388 {
