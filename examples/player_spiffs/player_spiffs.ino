@@ -21,7 +21,7 @@ void setup()
     cfg.serial_baudrate = 115200;
     M5.begin(cfg);
 
-    if (!device.begin(Wire)) {
+    if (!device.begin(M5.In_I2C)) {
         while (1) {
             Serial.println("Module Audio not found");
             delay(1000);

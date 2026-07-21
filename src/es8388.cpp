@@ -5,18 +5,28 @@
  */
 
 #include "es8388.hpp"
+#include <M5Unified.h>
 
 ES8388::ES8388(TwoWire* wire, uint8_t sda, uint8_t scl, uint32_t speed)
+    : _wire(wire), _m5_i2c(nullptr), _scl(scl), _sda(sda), _speed(speed)
 {
-    _wire  = wire;
-    _sda   = sda;
-    _scl   = scl;
-    _speed = speed;
     _wire->begin(_sda, _scl, _speed);
+}
+
+ES8388::ES8388(m5::I2C_Class* i2c, uint32_t speed) : _wire(nullptr), _m5_i2c(i2c), _scl(-1), _sda(-1), _speed(speed)
+{
 }
 
 bool ES8388::writeBytes(uint8_t reg, uint8_t data)
 {
+    if (_m5_i2c != nullptr) {
+        return _m5_i2c->writeRegister8(ES8388_ADDR, reg, data, _speed);
+    }
+
+    if (_wire == nullptr) {
+        return false;
+    }
+
     _wire->beginTransmission(ES8388_ADDR);
     _wire->write(reg);
     _wire->write(data);
@@ -35,6 +45,14 @@ bool ES8388::writeBytes(uint8_t reg, uint8_t data)
 
 bool ES8388::readBytes(uint8_t reg, uint8_t& data)
 {
+    if (_m5_i2c != nullptr) {
+        return _m5_i2c->readRegister(ES8388_ADDR, reg, &data, 1, _speed);
+    }
+
+    if (_wire == nullptr) {
+        return false;
+    }
+
     bool ret = false;
     _wire->beginTransmission(ES8388_ADDR);
     _wire->write(reg);

@@ -10,6 +10,10 @@
 #include <Arduino.h>
 #include <Wire.h>
 
+namespace m5 {
+class I2C_Class;
+}
+
 // #define ES8388_DEBUG Serial  // This macro definition can be annotated without sending and receiving data prints
 //         Define the serial port you want to use, e.g., Serial1 or Serial2
 #if defined ES8388_DEBUG
@@ -393,6 +397,13 @@ public:
     ES8388(TwoWire* wire, uint8_t sda = -1, uint8_t scl = -1, uint32_t speed = 400000L);
 
     /**
+     * @brief Constructs ES8388 codec controller using an M5Unified I2C bus
+     * @param i2c M5Unified I2C bus pointer (for example, &M5.In_I2C)
+     * @param speed I2C clock speed in Hz (default 400kHz)
+     */
+    ES8388(m5::I2C_Class* i2c, uint32_t speed = 400000L);
+
+    /**
      * @brief Reads all codec registers into a buffer
      * @return Pointer to 53-byte array containing register values (0x00-0x34)
      * @warning Caller must manage memory allocation/deallocation
@@ -487,6 +498,7 @@ public:
 
 private:
     TwoWire* _wire;
+    m5::I2C_Class* _m5_i2c;
     uint8_t _scl;
     uint8_t _sda;
     uint32_t _speed;

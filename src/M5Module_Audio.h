@@ -103,6 +103,21 @@ public:
     bool begin(TwoWire& wire, uint8_t addr = I2C_ADDR);
 
     /**
+     * @brief Initializes Module Audio using an M5Unified I2C bus and automatic board pin mapping.
+     * @param i2c M5Unified I2C bus (for example, M5.In_I2C).
+     * @param addr Module Audio controller I2C address.
+     * @param speed I2C clock speed in Hz.
+     * @return bool True if I2C, I2S, and ES8388 initialization succeeded.
+     */
+    bool begin(m5::I2C_Class& i2c, uint8_t addr = I2C_ADDR, uint32_t speed = 400000);
+
+    /**
+     * @brief Initializes Module Audio using an M5Unified I2C bus and explicit I2S pins.
+     */
+    bool begin(m5::I2C_Class& i2c, uint8_t addr, uint32_t speed, int sample_rate, int i2s_mck, int i2s_di, int i2s_ws,
+               int i2s_do, int i2s_bck);
+
+    /**
      * @brief Set microphone/LINE input status
      * @param status Audio input state (AUDIO_MIC_CLOSE/AUDIO_MIC_OPEN)
      * @note Controls register 0x00 (R/W)
@@ -352,6 +367,8 @@ public:
 
 private:
     TwoWire* _wire;
+    m5::I2C_Class* _m5_i2c;
+    uint32_t _i2c_speed;
     uint8_t _sda, _scl;
     uint8_t _addr;
 

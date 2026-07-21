@@ -6,6 +6,26 @@
 
 **Module Audio** is an audio-interaction expansion module for M5Stack, built on the ES8388 audio codec solution. It offers dual 3.5 mm jacks (one TRS jack for microphone input only, one TRRS jack for both microphone input and headphone output) to fulfill various recording and stereo playback needs. An onboard STM32G030F6P6 microcontroller handles TRRS jack insertion detection and drives WS2812C RGB LEDs. Register configuration enables automatic switching between CTIA (American) and OMTP (International) wiring standards, ensuring compatibility with most headsets featuring integrated microphones. This module is ideal for smart voice, interactive art, educational entertainment, portable recording, and other audio applications.
 
+## I2C bus selection
+
+Module Audio supports both the M5Unified internal I2C bus and the Arduino `Wire` bus. Call `M5.begin()` before using `M5.In_I2C`.
+
+```cpp
+M5ModuleAudio audio;
+
+M5.begin();
+audio.begin(M5.In_I2C);
+```
+
+Existing `Wire` code remains supported:
+
+```cpp
+M5ModuleAudio audio;
+
+M5.begin();
+audio.begin(Wire);
+```
+
 ## Related Link
 
 - [Document & Datasheet](https://docs.m5stack.com/en/module/Module-Audio)

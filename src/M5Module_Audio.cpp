@@ -35,12 +35,20 @@ uint32_t sample_rate_to_hz(es_sample_rate_t rate)
 }  // namespace
 
 #if USE_NEW_I2S_API
-M5ModuleAudio::M5ModuleAudio() : _wire(nullptr), _sda(0), _scl(0), _addr(I2C_ADDR), es8388(nullptr)
+M5ModuleAudio::M5ModuleAudio()
+    : _wire(nullptr), _m5_i2c(nullptr), _i2c_speed(400000), _sda(0), _scl(0), _addr(I2C_ADDR), es8388(nullptr)
 {
 }
 #else
 M5ModuleAudio::M5ModuleAudio(i2s_port_t i2s_num)
-    : _wire(nullptr), _sda(0), _scl(0), _addr(I2C_ADDR), es8388(nullptr), i2s_num(i2s_num)
+    : _wire(nullptr),
+      _m5_i2c(nullptr),
+      _i2c_speed(400000),
+      _sda(0),
+      _scl(0),
+      _addr(I2C_ADDR),
+      es8388(nullptr),
+      i2s_num(i2s_num)
 {
 }
 #endif
@@ -72,10 +80,29 @@ bool M5ModuleAudio::begin(TwoWire &wire, uint8_t addr)
     return begin(wire, sda, scl, addr, 400000, 44100, mck, di, ws, do_, bck);
 }
 
+bool M5ModuleAudio::begin(m5::I2C_Class &i2c, uint8_t addr, uint32_t speed)
+{
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+    uint8_t bck = M5.getPin(m5::pin_name_t::mbus_pin24);  // SCLK
+    uint8_t mck = M5.getPin(m5::pin_name_t::mbus_pin22);  // MCLK
+#else
+    uint8_t bck = M5.getPin(m5::pin_name_t::mbus_pin22);  // SCLK
+    uint8_t mck = M5.getPin(m5::pin_name_t::mbus_pin24);  // MCLK
+#endif
+    uint8_t di  = M5.getPin(m5::pin_name_t::mbus_pin26);
+    uint8_t ws  = M5.getPin(m5::pin_name_t::mbus_pin21);  // LRCK
+    uint8_t do_ = M5.getPin(m5::pin_name_t::mbus_pin23);
+    printf("I2C port: %d, SDA: %d, SCL: %d\n", i2c.getPort(), i2c.getSDA(), i2c.getSCL());
+    printf("I2S MCK: %d, DI: %d, WS: %d, DO: %d, BCK: %d\n", mck, di, ws, do_, bck);
+    return begin(i2c, addr, speed, 44100, mck, di, ws, do_, bck);
+}
+
 bool M5ModuleAudio::begin(TwoWire &wire, uint8_t sda, uint8_t scl, uint8_t addr, uint32_t speed)
 {
     _i2s_initialized = false;
     _wire            = &wire;
+    _m5_i2c          = nullptr;
+    _i2c_speed       = speed;
     _sda             = sda;
     _scl             = scl;
     _addr            = addr;
@@ -101,10 +128,12 @@ bool M5ModuleAudio::begin(TwoWire &wire, uint8_t sda, uint8_t scl, uint8_t addr,
 bool M5ModuleAudio::begin(TwoWire &wire, uint8_t sda, uint8_t scl, uint8_t addr, uint32_t speed, int sample_rate,
                           int i2s_mck, int i2s_di, int i2s_ws, int i2s_do, int i2s_bck)
 {
-    _wire = &wire;
-    _sda  = sda;
-    _scl  = scl;
-    _addr = addr;
+    _wire      = &wire;
+    _m5_i2c    = nullptr;
+    _i2c_speed = speed;
+    _sda       = sda;
+    _scl       = scl;
+    _addr      = addr;
 
     // Store IO pins
     _i2s_mck = i2s_mck;
@@ -139,6 +168,40 @@ bool M5ModuleAudio::begin(TwoWire &wire, uint8_t sda, uint8_t scl, uint8_t addr,
     setMicGain(MIC_GAIN_0DB);
 
     return true;
+}
+
+bool M5ModuleAudio::begin(m5::I2C_Class &i2c, uint8_t addr, uint32_t speed, int sample_rate, int i2s_mck, int i2s_di,
+                          int i2s_ws, int i2s_do, int i2s_bck)
+{
+    _wire      = nullptr;
+    _m5_i2c    = &i2c;
+    _i2c_speed = speed;
+    _sda       = i2c.getSDA();
+    _scl       = i2c.getSCL();
+    _addr      = addr;
+
+    _i2s_mck = i2s_mck;
+    _i2s_bck = i2s_bck;
+    _i2s_ws  = i2s_ws;
+    _i2s_do  = i2s_do;
+    _i2s_di  = i2s_di;
+
+    if (!i2c.isEnabled() || !i2c.scanID(addr, speed)) {
+        ESP_LOGI(TAG, "Module Audio controller not found on M5Unified I2C bus");
+        return false;
+    }
+
+    if (!i2s_driver_init(sample_rate)) {
+        ESP_LOGI(TAG, "I2S driver initialization failed");
+        return false;
+    }
+
+    if (!es8388_codec_init()) {
+        ESP_LOGI(TAG, "ES8388 codec initialization failed");
+        return false;
+    }
+
+    return setMicGain(MIC_GAIN_0DB);
 }
 
 void M5ModuleAudio::setMICStatus(audio_mic_t status)
@@ -249,7 +312,11 @@ bool M5ModuleAudio::es8388_codec_init()
         es8388 = nullptr;
     }
 
-    es8388 = new ES8388(_wire, _sda, _scl);
+    if (_m5_i2c != nullptr) {
+        es8388 = new ES8388(_m5_i2c, _i2c_speed);
+    } else {
+        es8388 = new ES8388(_wire, _sda, _scl, _i2c_speed);
+    }
     if (!es8388->init()) {
         ESP_LOGI(TAG, "Failed to initialize ES8388 codec");
         return false;
@@ -675,6 +742,15 @@ bool M5ModuleAudio::play(const uint8_t *buffer, int size)
 
 void M5ModuleAudio::writeBytes(uint8_t addr, uint8_t reg, uint8_t *buffer, uint8_t length)
 {
+    if (_m5_i2c != nullptr) {
+        _m5_i2c->writeRegister(addr, reg, buffer, length, _i2c_speed);
+        return;
+    }
+
+    if (_wire == nullptr) {
+        return;
+    }
+
     _wire->beginTransmission(addr);
     _wire->write(reg);
     for (int i = 0; i < length; i++) {
@@ -700,6 +776,18 @@ void M5ModuleAudio::writeBytes(uint8_t addr, uint8_t reg, uint8_t *buffer, uint8
 
 void M5ModuleAudio::readBytes(uint8_t addr, uint8_t reg, uint8_t *buffer, uint8_t length)
 {
+    if (_m5_i2c != nullptr) {
+        if (!_m5_i2c->readRegister(addr, reg, buffer, length, _i2c_speed)) {
+            memset(buffer, 0, length);
+        }
+        return;
+    }
+
+    if (_wire == nullptr) {
+        memset(buffer, 0, length);
+        return;
+    }
+
     uint8_t index = 0;
     _wire->beginTransmission(addr);
     _wire->write(reg);
