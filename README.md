@@ -26,6 +26,45 @@ M5.begin();
 audio.begin(Wire);
 ```
 
+## Microphone routing
+
+The LINE/MIC jack and the headset microphone share the ES8388 `LIN1` input. Keep the two STM32-controlled paths
+mutually exclusive.
+
+Use the LINE/MIC jack:
+
+```cpp
+audio.setHPMICStatus(AUDIO_MIC_CLOSE);
+audio.setMICStatus(AUDIO_MIC_OPEN);
+audio.setMicInputLine(ADC_INPUT_LINPUT1_RINPUT1);
+```
+
+Use the microphone in a connected headset:
+
+```cpp
+if (audio.getHPInsertStatus()) {
+    audio.setMICStatus(AUDIO_MIC_CLOSE);
+    audio.setHPMICStatus(AUDIO_MIC_OPEN);
+    audio.setMicInputLine(ADC_INPUT_LINPUT1_RINPUT1);
+}
+```
+
+Register `0x11` is reset to `AUDIO_MIC_CLOSE` at power-up. Headset insertion or removal does not change it.
+
+## Device UID
+
+Firmware `0xF1` exposes the STM32 96-bit UID in registers `0xE0` through `0xEB`:
+
+```cpp
+uint8_t uid[DEVICE_UID_LENGTH];
+if (audio.getDeviceUID(uid)) {
+    for (uint8_t value : uid) {
+        Serial.printf("%02X", value);
+    }
+    Serial.println();
+}
+```
+
 ## Related Link
 
 - [Document & Datasheet](https://docs.m5stack.com/en/module/Module-Audio)

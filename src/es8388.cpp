@@ -134,13 +134,12 @@ bool ES8388::init()
     // set DAC digital volume
     res &= writeBytes(ES8388_DACCONTROL4, 0x05);
     res &= writeBytes(ES8388_DACCONTROL5, 0x05);
-    // Setup Mixer
-    // (reg[16] 1B mic Amp, 0x09 direct;[reg 17-20] 0x90 DAC, 0x50 Mic Amp)
+    // Route only the digital DAC into the output mixers. Analog line bypass stays disabled.
     res &= writeBytes(ES8388_DACCONTROL16, 0x00);
-    res &= writeBytes(ES8388_DACCONTROL17, 0xd0);
+    res &= writeBytes(ES8388_DACCONTROL17, 0x90);
     res &= writeBytes(ES8388_DACCONTROL18, 0x38);  //??
     res &= writeBytes(ES8388_DACCONTROL19, 0x38);  //??
-    res &= writeBytes(ES8388_DACCONTROL20, 0xd0);
+    res &= writeBytes(ES8388_DACCONTROL20, 0x90);
     res &= writeBytes(ES8388_DACCONTROL21, 0x80);
     // set Lout/Rout Volume -45db
     res &= writeBytes(ES8388_DACCONTROL24, 0x12);
@@ -177,7 +176,9 @@ bool ES8388::setADCInput(es_adc_input_t input)
     res         = readBytes(ES8388_ADCCONTROL2, reg);
     reg         = reg & 0x0f;
     res &= writeBytes(ES8388_ADCCONTROL2, reg | input);
-    if (input == ADC_INPUT_LINPUT2_RINPUT2) {
+    if (input == ADC_INPUT_LINPUT1_RINPUT1) {
+        res &= writeBytes(ES8388_ADCCONTROL3, 0x00);
+    } else if (input == ADC_INPUT_LINPUT2_RINPUT2) {
         res &= writeBytes(ES8388_ADCCONTROL3, 0x80);
     }
     return res;
@@ -214,13 +215,12 @@ bool ES8388::setDACOutput(es_dac_output_t output)
 // mute Output
 bool ES8388::setDACmute(bool mute)
 {
-    uint8_t _reg;
-    readBytes(ES8388_ADCCONTROL1, _reg);
-    bool res = true;
+    uint8_t _reg = 0;
+    bool res     = readBytes(ES8388_DACCONTROL3, _reg);
     if (mute)
-        res &= writeBytes(ES8388_DACCONTROL3, _reg | 0x02);
+        res &= writeBytes(ES8388_DACCONTROL3, _reg | 0x04);
     else
-        res &= writeBytes(ES8388_DACCONTROL3, _reg & ~(0x02));
+        res &= writeBytes(ES8388_DACCONTROL3, _reg & ~(0x04));
     return res;
 }
 
@@ -264,6 +264,35 @@ bool ES8388::setMixSourceSelect(es_mixsel_t lmixsel, es_mixsel_t rmixsel)
     uint8_t data = (left_bits << 3) | (right_bits << 0);
     res &= writeBytes(ES8388_DACCONTROL16, data);
     return res;
+}
+
+bool ES8388::setLineBypass(bool enabled)
+{
+    uint8_t leftMixer  = 0;
+    uint8_t rightMixer = 0;
+    if (!readBytes(ES8388_DACCONTROL17, leftMixer) || !readBytes(ES8388_DACCONTROL20, rightMixer)) {
+        return false;
+    }
+
+    constexpr uint8_t AnalogBypassEnable = 0x40;
+    if (enabled) {
+        leftMixer |= AnalogBypassEnable;
+        rightMixer |= AnalogBypassEnable;
+    } else {
+        leftMixer &= static_cast<uint8_t>(~AnalogBypassEnable);
+        rightMixer &= static_cast<uint8_t>(~AnalogBypassEnable);
+    }
+    if (!writeBytes(ES8388_DACCONTROL17, leftMixer) || !writeBytes(ES8388_DACCONTROL20, rightMixer)) {
+        return false;
+    }
+
+    uint8_t actualLeft  = 0;
+    uint8_t actualRight = 0;
+    if (!readBytes(ES8388_DACCONTROL17, actualLeft) || !readBytes(ES8388_DACCONTROL20, actualRight)) {
+        return false;
+    }
+    const uint8_t expectedBypass = enabled ? AnalogBypassEnable : 0;
+    return (actualLeft & AnalogBypassEnable) == expectedBypass && (actualRight & AnalogBypassEnable) == expectedBypass;
 }
 
 bool ES8388::setBitsSample(es_module_t mode, es_bits_length_t bits_len)

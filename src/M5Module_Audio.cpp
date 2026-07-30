@@ -216,6 +216,12 @@ void M5ModuleAudio::setHPMode(audio_hpmode_t mode)
     writeBytes(_addr, reg, (uint8_t *)&mode, 1);
 }
 
+void M5ModuleAudio::setHPMICStatus(audio_mic_t status)
+{
+    uint8_t reg = HEADPHONE_MIC_STATUS;
+    writeBytes(_addr, reg, (uint8_t *)&status, 1);
+}
+
 void M5ModuleAudio::setRGBBrightness(uint8_t brightness)
 {
     if (brightness > 100) brightness = 100;
@@ -226,14 +232,35 @@ void M5ModuleAudio::setRGBBrightness(uint8_t brightness)
 void M5ModuleAudio::setRGBLED(uint8_t num, uint32_t color)
 {
     if (num > 2) num = 2;
-    color       = ((color & 0xFF) << 16) | (color & 0xFF00) | ((color >> 16) & 0xFF);
-    uint8_t reg = RGB_LED + num * 3;
-    writeBytes(_addr, reg, (uint8_t *)&color, 3);
+    uint8_t rgb[3] = {
+        static_cast<uint8_t>((color >> 16) & 0xFF),
+        static_cast<uint8_t>((color >> 8) & 0xFF),
+        static_cast<uint8_t>(color & 0xFF),
+    };
+    uint8_t reg = RGB_LED + num * sizeof(rgb);
+    writeBytes(_addr, reg, rgb, sizeof(rgb));
+}
+
+void M5ModuleAudio::setAllRGBLED(uint32_t color)
+{
+    const uint8_t red   = static_cast<uint8_t>((color >> 16) & 0xFF);
+    const uint8_t green = static_cast<uint8_t>((color >> 8) & 0xFF);
+    const uint8_t blue  = static_cast<uint8_t>(color & 0xFF);
+    uint8_t rgb[9];
+    for (size_t index = 0; index < sizeof(rgb); index += 3) {
+        rgb[index]     = red;
+        rgb[index + 1] = green;
+        rgb[index + 2] = blue;
+    }
+    writeBytes(_addr, RGB_LED, rgb, sizeof(rgb));
 }
 
 uint8_t M5ModuleAudio::setI2CAddress(uint8_t newAddr)
 {
-    newAddr     = constrain(newAddr, I2C_ADDR_MIN, I2C_ADDR_MAX);
+    if (newAddr < I2C_ADDR_MIN || newAddr > I2C_ADDR_MAX || newAddr == ES8388_ADDR) {
+        return _addr;
+    }
+
     uint8_t reg = I2C_ADDRESS;
     writeBytes(_addr, reg, (uint8_t *)&newAddr, 1);
     _addr = newAddr;
@@ -265,6 +292,14 @@ audio_hpmode_t M5ModuleAudio::getHPMode()
     return (audio_hpmode_t)data;
 }
 
+audio_mic_t M5ModuleAudio::getHPMICStatus()
+{
+    uint8_t data;
+    uint8_t reg = HEADPHONE_MIC_STATUS;
+    readBytes(_addr, reg, (uint8_t *)&data, 1);
+    return (audio_mic_t)data;
+}
+
 uint8_t M5ModuleAudio::getHPInsertStatus()
 {
     uint8_t data;
@@ -289,6 +324,26 @@ uint32_t M5ModuleAudio::getRGBLED(uint8_t num)
     return (rgb[0] << 16) | (rgb[1] << 8) | rgb[2];
 }
 
+bool M5ModuleAudio::getRGBLEDs(uint32_t colors[3])
+{
+    if (colors == nullptr) {
+        return false;
+    }
+
+    uint8_t rgb[9] = {};
+    if (!readBytes(_addr, RGB_LED, rgb, sizeof(rgb))) {
+        colors[0] = colors[1] = colors[2] = 0;
+        return false;
+    }
+
+    for (size_t index = 0; index < 3; ++index) {
+        const size_t offset = index * 3;
+        colors[index] = (static_cast<uint32_t>(rgb[offset]) << 16) | (static_cast<uint32_t>(rgb[offset + 1]) << 8) |
+                        static_cast<uint32_t>(rgb[offset + 2]);
+    }
+    return true;
+}
+
 uint8_t M5ModuleAudio::getFirmwareVersion()
 {
     uint8_t version;
@@ -303,6 +358,14 @@ uint8_t M5ModuleAudio::getI2CAddress()
     uint8_t reg = I2C_ADDRESS;
     readBytes(_addr, reg, (uint8_t *)&I2CAddress, 1);
     return I2CAddress;
+}
+
+bool M5ModuleAudio::getDeviceUID(uint8_t uid[DEVICE_UID_LENGTH])
+{
+    if (uid == nullptr) {
+        return false;
+    }
+    return readBytes(_addr, DEVICE_UID, uid, DEVICE_UID_LENGTH);
 }
 
 bool M5ModuleAudio::es8388_codec_init()
@@ -511,6 +574,20 @@ bool M5ModuleAudio::setMixSourceSelect(es_mixsel_t lmixsel, es_mixsel_t rmixsel)
     return true;
 }
 
+bool M5ModuleAudio::setLineBypass(bool enabled)
+{
+    if (es8388 == nullptr) {
+        ESP_LOGI(TAG, "ES8388 codec is not initialized");
+        return false;
+    }
+
+    if (!es8388->setLineBypass(enabled)) {
+        ESP_LOGI(TAG, "Failed to configure ES8388 line bypass");
+        return false;
+    }
+    return true;
+}
+
 bool M5ModuleAudio::setBitsSample(es_module_t mode, es_bits_length_t bits_len)
 {
     if (es8388 == nullptr) {
@@ -590,7 +667,7 @@ int M5ModuleAudio::getBufferSize(int duration, int sample_rate)
 #if USE_NEW_I2S_API
         sample_rate = I2S.txSampleRate();
 #else
-        sample_rate = i2s_cfg.sample_rate;
+        sample_rate         = i2s_cfg.sample_rate;
 #endif
     }
     return duration * sample_rate * 2 * 2;  // sample_rate * bytes_per_sample * channels
@@ -602,7 +679,7 @@ int M5ModuleAudio::getDuration(int size, int sample_rate)
 #if USE_NEW_I2S_API
         sample_rate = I2S.txSampleRate();
 #else
-        sample_rate = i2s_cfg.sample_rate;
+        sample_rate         = i2s_cfg.sample_rate;
 #endif
     }
     return size / (sample_rate * 2 * 2);  // sample_rate * bytes_per_sample * channels
@@ -638,7 +715,7 @@ bool M5ModuleAudio::record(FS &fs, const char *filename, int size)
             return false;
         }
 #else
-        esp_err_t err = i2s_read(i2s_num, buffer, bytes_to_read, &bytes_read, portMAX_DELAY);
+        esp_err_t err       = i2s_read(i2s_num, buffer, bytes_to_read, &bytes_read, portMAX_DELAY);
         if (err != ESP_OK || bytes_read != bytes_to_read) {
             ESP_LOGI(TAG, "Recording failed during I2S read");
             file.close();
@@ -726,13 +803,13 @@ bool M5ModuleAudio::play(const uint8_t *buffer, int size)
     size_t bytes_written = 0;
 #if USE_NEW_I2S_API
     bytes_written = I2S.write(buffer, size);
-    if (bytes_written < 0) {
+    if (bytes_written != static_cast<size_t>(size)) {
         ESP_LOGI(TAG, "Playback failed");
         return false;
     }
 #else
     esp_err_t err = i2s_write(i2s_num, buffer, size, &bytes_written, portMAX_DELAY);
-    if (err != ESP_OK) {
+    if (err != ESP_OK || bytes_written != static_cast<size_t>(size)) {
         ESP_LOGI(TAG, "Playback failed");
         return false;
     }
@@ -774,25 +851,32 @@ void M5ModuleAudio::writeBytes(uint8_t addr, uint8_t reg, uint8_t *buffer, uint8
 #endif
 }
 
-void M5ModuleAudio::readBytes(uint8_t addr, uint8_t reg, uint8_t *buffer, uint8_t length)
+bool M5ModuleAudio::readBytes(uint8_t addr, uint8_t reg, uint8_t *buffer, uint8_t length)
 {
+    if (buffer == nullptr || length == 0) {
+        return false;
+    }
+
     if (_m5_i2c != nullptr) {
         if (!_m5_i2c->readRegister(addr, reg, buffer, length, _i2c_speed)) {
             memset(buffer, 0, length);
+            return false;
         }
-        return;
+        return true;
     }
 
     if (_wire == nullptr) {
         memset(buffer, 0, length);
-        return;
+        return false;
     }
 
     uint8_t index = 0;
     _wire->beginTransmission(addr);
     _wire->write(reg);
-    _wire->endTransmission(false);
-    _wire->requestFrom(addr, length);
+    if (_wire->endTransmission(false) != 0 || _wire->requestFrom(addr, length) != length) {
+        memset(buffer, 0, length);
+        return false;
+    }
     for (int i = 0; i < length; i++) {
         buffer[index++] = _wire->read();
     }
@@ -811,4 +895,5 @@ void M5ModuleAudio::readBytes(uint8_t addr, uint8_t reg, uint8_t *buffer, uint8_
     Serial.println("]");
 #else
 #endif
+    return true;
 }

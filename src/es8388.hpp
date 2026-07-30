@@ -472,6 +472,13 @@ public:
     bool setMixSourceSelect(es_mixsel_t lmixsel, es_mixsel_t rmixsel);
 
     /**
+     * @brief Enables or disables the analog input bypass into both output mixers
+     * @param enabled true to mix the selected analog inputs into the outputs
+     * @return true if both mixer registers were updated
+     */
+    bool setLineBypass(bool enabled);
+
+    /**
      * @brief Configures audio sample format
      * @param mode Audio module (ADC/DAC)
      * @param len Bit length configuration

@@ -39,9 +39,12 @@
 #define I2C_ADDR_MAX            (0x77)
 #define MICROPHONE_STATUS       (0x00)
 #define HEADPHONE_MODE          (0x10)
+#define HEADPHONE_MIC_STATUS    (0x11)
 #define HEADPHONE_INSERT_STATUS (0x20)
 #define RGB_LED_BRIGHTNESS      (0x30)
 #define RGB_LED                 (0x40)
+#define DEVICE_UID              (0xE0)
+#define DEVICE_UID_LENGTH       (12)
 #define FLASH_WRITE             (0xF0)
 #define FIRMWARE_VERSION        (0xFE)
 #define I2C_ADDRESS             (0xFF)
@@ -63,12 +66,12 @@ typedef enum { AUDIO_MIC_CLOSE = 0, AUDIO_MIC_OPEN } audio_mic_t;
  * @brief Headphone output mode configuration options
  * @details Corresponds to register 0x10 (R/W)
  *
- * @var AUDIO_HPMODE_NATIONAL
- * National Standard audio mode (value: 0, default)
  * @var AUDIO_HPMODE_AMERICAN
- * American Standard audio mode (value: 1)
+ * American Standard (CTIA) audio mode (value: 0, default)
+ * @var AUDIO_HPMODE_NATIONAL
+ * National Standard (OMTP) audio mode (value: 1)
  */
-typedef enum { AUDIO_HPMODE_NATIONAL = 0, AUDIO_HPMODE_AMERICAN } audio_hpmode_t;
+typedef enum { AUDIO_HPMODE_AMERICAN = 0, AUDIO_HPMODE_NATIONAL = 1 } audio_hpmode_t;
 
 /**
  * @brief Class to manage M5ModuleAudio operations including audio input/output and codec control.
@@ -134,6 +137,13 @@ public:
     void setHPMode(audio_hpmode_t mode);
 
     /**
+     * @brief Enable or disable the microphone in the headset jack.
+     * @param status Headset microphone state (AUDIO_MIC_CLOSE/AUDIO_MIC_OPEN).
+     * @note Controls register 0x11 (R/W). This setting is not persisted.
+     */
+    void setHPMICStatus(audio_mic_t status);
+
+    /**
      * @brief Set global brightness for all RGB LEDs
      * @param brightness Brightness value (0-100)
      * @note Writes to register 0x30 (R/W), default:10
@@ -142,12 +152,19 @@ public:
 
     /**
      * @brief Set color for specific RGB LED
-     * @param num LED number (1-3)
+     * @param num Zero-based LED number (0-2)
      * @param color 24-bit color value (0xRRGGBB)
      * @note Writes to register 0x40 (R/W). Color components are automatically
      *       decomposed into 3 bytes (R, G, B)
      */
     void setRGBLED(uint8_t num, uint32_t color);
+
+    /**
+     * @brief Set all three RGB LEDs to the same color in one I2C transaction
+     * @param color 24-bit color value (0xRRGGBB)
+     * @note Writes 9 bytes to registers 0x40-0x48 in R, G, B order
+     */
+    void setAllRGBLED(uint32_t color);
 
     /**
      * @brief Trigger configuration save to internal Flash
@@ -158,9 +175,9 @@ public:
 
     /**
      * @brief Set device I2C address
-     * @param newAddr New I2C address (0x08-0x77)
-     * @return Actual set address (may differ if invalid input)
-     * @note Writes to register 0xFF (R/W). Requires reboot to take effect.
+     * @param newAddr New I2C address (0x08-0x77, excluding 0x10 reserved for ES8388)
+     * @return Current device address; unchanged if newAddr is invalid
+     * @note Writes to register 0xFF (R/W). The new address takes effect immediately and is saved automatically.
      */
     uint8_t setI2CAddress(uint8_t newAddr);
 
@@ -179,6 +196,13 @@ public:
     audio_hpmode_t getHPMode();
 
     /**
+     * @brief Get the microphone state of the headset jack.
+     * @return Current headset microphone state.
+     * @note Reads register 0x11 (R/W).
+     */
+    audio_mic_t getHPMICStatus();
+
+    /**
      * @brief Get headphone insertion status
      * @return 0=Not inserted, 1=Inserted
      * @note Reads from register 0x20 (Read-Only)
@@ -194,11 +218,18 @@ public:
 
     /**
      * @brief Get current color for specific RGB LED
-     * @param num LED number (1-3)
+     * @param num Zero-based LED number (0-2)
      * @return 24-bit color value (0xRRGGBB)
      * @note Reads from register 0x40 (R/W). Combines 3 bytes (R, G, B) into color
      */
     uint32_t getRGBLED(uint8_t num);
+
+    /**
+     * @brief Read all three RGB LED colors in one I2C transaction
+     * @param colors Output array of three 0xRRGGBB color values
+     * @return true when all 9 register bytes were read successfully
+     */
+    bool getRGBLEDs(uint32_t colors[3]);
 
     /**
      * @brief Get firmware version
@@ -213,6 +244,14 @@ public:
      * @note Reads from register 0xFF (R/W). Default:0x33
      */
     uint8_t getI2CAddress();
+
+    /**
+     * @brief Read the STM32 96-bit unique device identifier.
+     * @param uid Destination buffer with room for DEVICE_UID_LENGTH bytes.
+     * @return True when all 12 bytes were read successfully.
+     * @note Reads registers 0xE0 through 0xEB in little-endian word order.
+     */
+    bool getDeviceUID(uint8_t uid[DEVICE_UID_LENGTH]);
 
     /**
      * @brief Sets the speaker volume.
@@ -278,6 +317,14 @@ public:
      * @return bool True if the mixer was configured successfully, false otherwise.
      */
     bool setMixSourceSelect(es_mixsel_t lmixsel, es_mixsel_t rmixsel);
+
+    /**
+     * @brief Enables or disables the ES8388 analog input bypass to the output mixers.
+     *
+     * @param enabled True to mix analog input into the outputs, false for DAC-only output.
+     * @return bool True if both mixer registers were updated successfully.
+     */
+    bool setLineBypass(bool enabled);
 
     /**
      * @brief Configures ES8388 sample width.
@@ -414,8 +461,9 @@ private:
      * @param reg    The register address from which the data will be read.
      * @param buffer A pointer to the data buffer where the read bytes will be stored.
      * @param length The number of bytes to read into the buffer.
+     * @return True when the complete register range was read successfully.
      */
-    void readBytes(uint8_t addr, uint8_t reg, uint8_t* buffer, uint8_t length);
+    bool readBytes(uint8_t addr, uint8_t reg, uint8_t* buffer, uint8_t length);
 
     // Initializes the ES8388 codec
     bool es8388_codec_init();
